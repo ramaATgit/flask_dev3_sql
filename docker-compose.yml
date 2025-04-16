@@ -1,0 +1,6 @@
+command: >
+  bash -c "
+    pip install -r requirements-local.txt &&
+    (cd /app && python -c 'from main import app, db; from seed_data import seed_database; app.app_context().push(); db.create_all(); seed_database()') &&
+    flask run --host=0.0.0.0 --port=5000
+  "

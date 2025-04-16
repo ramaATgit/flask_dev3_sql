@@ -1,0 +1,413 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1>Financial Reports</h1>
+    </div>
+</div>
+
+<!-- Report Navigation Tabs -->
+<ul class="nav nav-tabs mb-4" id="reportTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="updates-tab" data-bs-toggle="tab" data-bs-target="#updates" type="button" role="tab" aria-controls="updates" aria-selected="true">
+            <i class="fas fa-exchange-alt me-1"></i> Update History
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="maturing-tab" data-bs-toggle="tab" data-bs-target="#maturing" type="button" role="tab" aria-controls="maturing" aria-selected="false">
+            <i class="fas fa-calendar-alt me-1"></i> Maturing Accounts
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="grouped-tab" data-bs-toggle="tab" data-bs-target="#grouped" type="button" role="tab" aria-controls="grouped" aria-selected="false">
+            <i class="fas fa-layer-group me-1"></i> Grouped Accounts
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="charts-tab" data-bs-toggle="tab" data-bs-target="#charts" type="button" role="tab" aria-controls="charts" aria-selected="false">
+            <i class="fas fa-chart-pie me-1"></i> Charts
+        </button>
+    </li>
+</ul>
+
+<!-- Tab Content -->
+<div class="tab-content" id="reportTabsContent">
+    <!-- Update History Tab -->
+    <div class="tab-pane fade show active" id="updates" role="tabpanel" aria-labelledby="updates-tab">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">CSV Update History</h5>
+            </div>
+            <div class="card-body">
+                {% if csv_results or account_snapshots %}
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i> CSV Processing Results</h5>
+                    <p>Updated: {{ csv_results.updated }} accounts</p>
+                    <p>Not Found: {{ csv_results.not_found }} accounts</p>
+                    <p>Errors: {{ csv_results.error }} accounts</p>
+                </div>
+                
+                <h5 class="mt-4">Account Changes</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Account Name</th>
+                                <th>Account Number</th>
+                                <th>Bank Name</th>
+                                <th>Previous Balance</th>
+                                <th>New Balance</th>
+                                <th>Change</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for snapshot in account_snapshots %}
+                            <tr>
+                                <td>{{ snapshot.account_name }}</td>
+                                <td>{{ snapshot.account_number }}</td>
+                                <td>{{ snapshot.bank_name }}</td>
+                                <td>£{{ "%.2f"|format(snapshot.before.balance) }}</td>
+                                <td>£{{ "%.2f"|format(snapshot.after.balance) }}</td>
+                                <td class="{% if snapshot.after.change > 0 %}text-success{% elif snapshot.after.change < 0 %}text-danger{% endif %}">
+                                    {% if snapshot.after.change > 0 %}+{% endif %}£{{ "%.2f"|format(snapshot.after.change) }}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center">No update history available</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {% if csv_results.not_found > 0 %}
+                <h5 class="mt-4">Accounts Not Found</h5>
+                <div class="alert alert-warning">
+                    <p>The following accounts from the CSV were not found in the system:</p>
+                    <ul>
+                        {% for account in csv_results.not_found_accounts %}
+                        <li>{{ account }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
+                {% if csv_results.error > 0 %}
+                <h5 class="mt-4">Processing Errors</h5>
+                <div class="alert alert-danger">
+                    <p>The following errors occurred during processing:</p>
+                    <ul>
+                        {% for error in csv_results.error_accounts %}
+                        <li>{{ error.account }}: {{ error.error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
+                {% else %}
+                <div class="alert alert-info">
+                    <p>No recent CSV uploads available. Upload a CSV file to see the update history.</p>
+                    <a href="{{ url_for('upload') }}" class="btn btn-primary mt-2">
+                        <i class="fas fa-upload me-1"></i> Upload CSV
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Maturing Accounts Tab -->
+    <div class="tab-pane fade" id="maturing" role="tabpanel" aria-labelledby="maturing-tab">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Accounts Maturing in the Next 30 Days</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Account Name</th>
+                                <th>Account Number</th>
+                                <th>Type</th>
+                                <th>Bank</th>
+                                <th>Balance</th>
+                                <th>Interest Rate</th>
+                                <th>Start Date</th>
+                                <th>Maturity Date</th>
+                                <th>Days Left</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for account in maturing_accounts %}
+                            {% set days_left = (account.end_date - now.date()).days %}
+                            <tr>
+                                <td>{{ account.account_name }}</td>
+                                <td>{{ account.account_number }}</td>
+                                <td>
+                                    {% if account.account_type == 'isa' %}
+                                    <span class="badge bg-info">ISA</span>
+                                    {% elif account.account_type == 'depo' %}
+                                    <span class="badge bg-success">Deposit</span>
+                                    {% elif account.account_type == 'nsi' %}
+                                    <span class="badge bg-warning">NSI</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ account.bank_name }}</td>
+                                <td>£{{ "%.2f"|format(account.balance) }}</td>
+                                <td>{{ account.interest_rate }}%</td>
+                                <td>{{ account.start_date }}</td>
+                                <td>{{ account.end_date }}</td>
+                                <td>
+                                    <span class="badge {% if days_left <= 7 %}bg-danger{% elif days_left <= 14 %}bg-warning{% else %}bg-primary{% endif %}">
+                                        {{ days_left }} days
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="9" class="text-center">No accounts are maturing in the next 30 days</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Grouped Accounts Tab -->
+    <div class="tab-pane fade" id="grouped" role="tabpanel" aria-labelledby="grouped-tab">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title">Accounts Grouped by FRN and Owner</h5>
+                <button type="button" id="refresh-frn-owner-data" class="btn btn-sm btn-primary">
+                    <i class="fas fa-sync-alt me-1"></i> Refresh Data
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <p><strong>Note:</strong> If you've recently added or modified accounts and don't see the changes reflected, please click the "Refresh Data" button above.</p>
+                </div>
+                <div id="loading-indicator" class="text-center p-3 d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Refreshing data...</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>FRN</th>
+                                <th>Owner</th>
+                                <th>Number of Accounts</th>
+                                <th>Total Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="frn-owner-table">
+                            {% for group in accounts_by_frn_owner %}
+                            <tr>
+                                <td>{{ group.frn }}</td>
+                                <td>
+                                    {% if group.owner == 'a' %}
+                                    <span class="badge bg-primary">A</span>
+                                    {% elif group.owner == 'i' %}
+                                    <span class="badge bg-success">I</span>
+                                    {% elif group.owner == 'j' %}
+                                    <span class="badge bg-warning">J</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ group.account_count }}</td>
+                                <td>£{{ "%.2f"|format(group.total_balance) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">No grouped accounts available</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts Tab -->
+    <div class="tab-pane fade" id="charts" role="tabpanel" aria-labelledby="charts-tab">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Balance by Account Type</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="accountTypeChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Balance by Owner</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="ownerChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Accounts by FRN</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="frnChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+    function formatCurrency(amount) {
+        return '£' + parseFloat(amount).toFixed(2);
+    }
+    
+    function loadFrnOwnerData() {
+        // Show loading indicator
+        const loadingIndicator = document.getElementById('loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.classList.remove('d-none');
+        }
+        
+        // Get fresh data directly from API with aggressive cache-busting
+        const timestamp = new Date().getTime();
+        
+        // Completely bypass any caching with a new XHR request
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `/api/frn-owner-data?nocache=${timestamp}`, true);
+        
+        // Set headers to prevent caching
+        xhr.setRequestHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        xhr.setRequestHeader('Pragma', 'no-cache');
+        xhr.setRequestHeader('Expires', '0');
+        
+        xhr.onload = function() {
+            // Hide loading indicator
+            if (loadingIndicator) {
+                loadingIndicator.classList.add('d-none');
+            }
+            
+            if (xhr.status >= 200 && xhr.status < 300) {
+                // Process successful response
+                const data = JSON.parse(xhr.responseText);
+                
+                const frnOwnerTable = document.getElementById('frn-owner-table');
+                if (!frnOwnerTable) return;
+                
+                if (!data.accounts_by_frn_owner || data.accounts_by_frn_owner.length === 0) {
+                    frnOwnerTable.innerHTML = '<tr><td colspan="4" class="text-center">No grouped accounts available</td></tr>';
+                    return;
+                }
+                
+                let tableHtml = '';
+                data.accounts_by_frn_owner.forEach(group => {
+                    let ownerBadge = '';
+                    if (group.owner === 'a') {
+                        ownerBadge = '<span class="badge bg-primary">A</span>';
+                    } else if (group.owner === 'i') {
+                        ownerBadge = '<span class="badge bg-success">I</span>';
+                    } else if (group.owner === 'j') {
+                        ownerBadge = '<span class="badge bg-warning">J</span>';
+                    }
+                    
+                    tableHtml += `
+                    <tr>
+                        <td>${group.frn}</td>
+                        <td>${ownerBadge}</td>
+                        <td>${group.account_count}</td>
+                        <td>${formatCurrency(group.total_balance)}</td>
+                    </tr>
+                    `;
+                });
+                
+                frnOwnerTable.innerHTML = tableHtml;
+                
+                console.log('FRN-Owner data refreshed successfully at:', timestamp);
+                console.log('Data received:', data.accounts_by_frn_owner);
+            } else {
+                // Handle error response
+                console.error('Error refreshing FRN-Owner data:', xhr.statusText);
+                alert('Error refreshing data. Please try again.');
+            }
+        };
+        
+        xhr.onerror = function() {
+            // Hide loading indicator and show error
+            if (loadingIndicator) {
+                loadingIndicator.classList.add('d-none');
+            }
+            console.error('Network error while refreshing FRN-Owner data');
+            alert('Network error. Please try again.');
+        };
+        
+        // Send the request
+        xhr.send();
+    }
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize charts when the charts tab is shown
+        const chartsTab = document.getElementById('charts-tab');
+        const groupedTab = document.getElementById('grouped-tab');
+        
+        chartsTab.addEventListener('shown.bs.tab', function() {
+            loadChartData();
+        });
+        
+        // Load FRN-Owner data when tab is shown
+        groupedTab.addEventListener('shown.bs.tab', function() {
+            loadFrnOwnerData();
+        });
+        
+        // Handle the refresh button click for FRN-Owner data
+        const refreshFrnOwnerButton = document.getElementById('refresh-frn-owner-data');
+        if (refreshFrnOwnerButton) {
+            refreshFrnOwnerButton.addEventListener('click', function() {
+                // Show visual feedback that we're refreshing
+                this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Loading...';
+                this.disabled = true;
+                
+                // Load fresh data from API
+                loadFrnOwnerData();
+                
+                // Reset button after a short delay
+                setTimeout(() => {
+                    this.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Refresh Data';
+                    this.disabled = false;
+                }, 1000);
+            });
+        }
+        
+        // Load initial chart data if charts tab is active
+        if (document.querySelector('#charts-tab.active')) {
+            loadChartData();
+        }
+        
+        // Load initial FRN-Owner data if grouped tab is active
+        if (document.querySelector('#grouped-tab.active')) {
+            loadFrnOwnerData();
+        }
+    });
+</script>
+{% endblock %}

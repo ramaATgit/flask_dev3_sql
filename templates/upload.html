@@ -1,0 +1,121 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1>CSV Upload</h1>
+        <p class="lead">Upload a CSV file to update account balances.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">Upload CSV File</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Select CSV File</label>
+                        <input class="form-control" type="file" id="file" name="file" accept=".csv" required>
+                        <div class="form-text">The CSV file should contain columns: Account, bal</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload me-1"></i> Upload and Process
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">CSV Format Requirements</h5>
+            </div>
+            <div class="card-body">
+                <p>Your CSV file must meet the following requirements:</p>
+                <ul>
+                    <li>Must have <strong>Account</strong> and <strong>bal</strong> columns</li>
+                    <li>Account names must match existing accounts in the system</li>
+                    <li>Balance (bal) should be a valid number</li>
+                </ul>
+                
+                <h6 class="mt-4 mb-2">Example CSV Format:</h6>
+                <div class="bg-dark p-3 rounded">
+                    <pre class="mb-0 text-white">Account,bal
+Current Account,1500.25
+Savings Account,3000.00
+ISA Account,5250.75</pre>
+                </div>
+                
+                <div class="alert alert-info mt-4">
+                    <i class="fas fa-info-circle me-2"></i>
+                    The system will create a backup of account data before updating, which can be viewed in the reports section.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title">CSV Upload Process</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex">
+                    <div class="step-item">
+                        <div class="step-number">1</div>
+                        <div class="step-title">Upload CSV</div>
+                        <div class="step-desc">Select and upload a CSV file with account updates</div>
+                    </div>
+                    <div class="step-arrow">
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-number">2</div>
+                        <div class="step-title">Validation</div>
+                        <div class="step-desc">System validates format and account names</div>
+                    </div>
+                    <div class="step-arrow">
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-number">3</div>
+                        <div class="step-title">Processing</div>
+                        <div class="step-desc">Account balances are updated in the system</div>
+                    </div>
+                    <div class="step-arrow">
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-number">4</div>
+                        <div class="step-title">Report</div>
+                        <div class="step-desc">View detailed report of all changes</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Preview uploaded CSV file
+    document.addEventListener('DOMContentLoaded', function() {
+        const fileInput = document.getElementById('file');
+        
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            
+            if (file && file.type === 'text/csv') {
+                // Handle file preview if needed
+            }
+        });
+    });
+</script>
+{% endblock %}

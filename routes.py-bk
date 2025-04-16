@@ -1,0 +1,339 @@
+import os
+import pandas as pd
+from datetime import datetime, timedelta
+from flask import render_template, request, redirect, url_for, flash, jsonify, session
+from werkzeug.utils import secure_filename
+from sqlalchemy import func
+from app import app, db
+from models import Account, Bank, TransactionLog
+from utils import process_csv_file, backup_data, get_account_snapshots
+
+# Add the 'now' variable to all templates
+@app.context_processor
+def inject_now():
+    return {'now': datetime.now()}
+
+@app.route('/')
+def index():
+    # Count of accounts, banks, and total balance
+    account_count = Account.query.count()
+    bank_count = Bank.query.count()
+    total_balance = db.session.query(func.sum(Account.balance)).scalar() or 0
+    
+    # Recent transactions
+    recent_transactions = TransactionLog.query.order_by(TransactionLog.timestamp.desc()).limit(5).all()
+    
+    # Accounts maturing soon
+    today = datetime.now().date()
+    thirty_days_later = today + timedelta(days=30)
+    maturing_soon = Account.query.filter(
+        Account.end_date.isnot(None),
+        Account.end_date.between(today, thirty_days_later)
+    ).count()
+    
+    return render_template('index.html', 
+                           account_count=account_count,
+                           bank_count=bank_count,
+                           total_balance=total_balance,
+                           recent_transactions=recent_transactions,
+                           maturing_soon=maturing_soon)
+
+@app.route('/accounts')
+def accounts():
+    accounts = Account.query.all()
+    return render_template('accounts.html', accounts=accounts)
+
+@app.route('/accounts/add', methods=['POST'])
+def add_account():
+    try:
+        # Extract form data
+        account_name = request.form.get('account_name')
+        account_number = request.form.get('account_number')
+        balance = float(request.form.get('balance', 0))
+        account_type = request.form.get('account_type')
+        owner = request.form.get('owner')
+        savings = request.form.get('savings')
+        bank_name = request.form.get('bank_name')
+        
+        # Check if bank exists, if not create it
+        bank = Bank.query.filter_by(bank_name=bank_name).first()
+        if not bank:
+            bank = Bank(bank_name=bank_name, frn=request.form.get('frn', 'Unknown'))
+            db.session.add(bank)
+            db.session.flush()
+        
+        # Create new account
+        new_account = Account(
+            account_name=account_name,
+            account_number=account_number,
+            balance=balance,
+            account_type=account_type,
+            owner=owner,
+            savings=savings,
+            bank_name=bank_name,
+            bank_id=bank.id
+        )
+        
+        # Add additional fields for non-"none" type accounts
+        if account_type != 'none':
+            new_account.interest_rate = float(request.form.get('interest_rate', 0))
+            start_date_str = request.form.get('start_date')
+            end_date_str = request.form.get('end_date')
+            
+            if start_date_str:
+                new_account.start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            if end_date_str:
+                new_account.end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                
+            new_account.interest_frequency = request.form.get('interest_frequency')
+        
+        db.session.add(new_account)
+        db.session.commit()
+        
+        # Log transaction
+        log = TransactionLog(
+            account_id=new_account.id,
+            previous_balance=0,
+            new_balance=balance,
+            change_amount=balance,
+            source="manual_creation"
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        flash('Account created successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error creating account: {str(e)}', 'danger')
+    
+    return redirect(url_for('accounts'))
+
+@app.route('/accounts/<int:id>/edit', methods=['POST'])
+def edit_account(id):
+    try:
+        account = Account.query.get_or_404(id)
+        previous_balance = account.balance
+        
+        # Update account details
+        account.account_name = request.form.get('account_name')
+        account.account_number = request.form.get('account_number')
+        new_balance = float(request.form.get('balance', 0))
+        account.account_type = request.form.get('account_type')
+        account.owner = request.form.get('owner')
+        account.savings = request.form.get('savings')
+        account.bank_name = request.form.get('bank_name')
+        
+        # Check if bank exists, if not create it
+        bank = Bank.query.filter_by(bank_name=account.bank_name).first()
+        if not bank:
+            bank = Bank(bank_name=account.bank_name, frn=request.form.get('frn', 'Unknown'))
+            db.session.add(bank)
+            db.session.flush()
+            account.bank_id = bank.id
+        
+        # Update additional fields for non-"none" type accounts
+        if account.account_type != 'none':
+            account.interest_rate = float(request.form.get('interest_rate', 0))
+            start_date_str = request.form.get('start_date')
+            end_date_str = request.form.get('end_date')
+            
+            if start_date_str:
+                account.start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            if end_date_str:
+                account.end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                
+            account.interest_frequency = request.form.get('interest_frequency')
+        
+        # Check if balance has changed
+        if previous_balance != new_balance:
+            account.balance = new_balance
+            
+            # Log transaction
+            log = TransactionLog(
+                account_id=account.id,
+                previous_balance=previous_balance,
+                new_balance=new_balance,
+                change_amount=new_balance - previous_balance,
+                source="manual_edit"
+            )
+            db.session.add(log)
+        
+        db.session.commit()
+        flash('Account updated successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating account: {str(e)}', 'danger')
+    
+    return redirect(url_for('accounts'))
+
+@app.route('/accounts/<int:id>/delete', methods=['POST'])
+def delete_account(id):
+    try:
+        account = Account.query.get_or_404(id)
+        db.session.delete(account)
+        db.session.commit()
+        flash('Account deleted successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting account: {str(e)}', 'danger')
+    
+    return redirect(url_for('accounts'))
+
+@app.route('/banks')
+def banks():
+    banks = Bank.query.all()
+    return render_template('banks.html', banks=banks)
+
+@app.route('/banks/add', methods=['POST'])
+def add_bank():
+    try:
+        bank_name = request.form.get('bank_name')
+        frn = request.form.get('frn')
+        
+        bank = Bank(bank_name=bank_name, frn=frn)
+        db.session.add(bank)
+        db.session.commit()
+        
+        flash('Bank added successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error adding bank: {str(e)}', 'danger')
+    
+    return redirect(url_for('banks'))
+
+@app.route('/banks/<int:id>/edit', methods=['POST'])
+def edit_bank(id):
+    try:
+        bank = Bank.query.get_or_404(id)
+        bank.bank_name = request.form.get('bank_name')
+        bank.frn = request.form.get('frn')
+        
+        db.session.commit()
+        flash('Bank updated successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating bank: {str(e)}', 'danger')
+    
+    return redirect(url_for('banks'))
+
+@app.route('/banks/<int:id>/delete', methods=['POST'])
+def delete_bank(id):
+    try:
+        bank = Bank.query.get_or_404(id)
+        
+        # Check if any accounts are linked to this bank
+        if bank.accounts:
+            flash('Cannot delete bank with linked accounts', 'danger')
+            return redirect(url_for('banks'))
+            
+        db.session.delete(bank)
+        db.session.commit()
+        flash('Bank deleted successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting bank: {str(e)}', 'danger')
+    
+    return redirect(url_for('banks'))
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload():
+    if request.method == 'POST':
+        # Check if a file was uploaded
+        if 'csv_file' not in request.files:
+            flash('No file part', 'danger')
+            return redirect(request.url)
+        
+        file = request.files['csv_file']
+        
+        # Check if the file is valid
+        if file.filename == '':
+            flash('No file selected', 'danger')
+            return redirect(request.url)
+        
+        if file and file.filename.endswith('.csv'):
+            try:
+                # Create a backup of current data
+                account_snapshots = get_account_snapshots()
+                session['account_snapshots'] = account_snapshots
+                
+                # Process the CSV file
+                results = process_csv_file(file)
+                
+                # Flash success message
+                flash(f'CSV processed successfully. Updated {results["updated"]} accounts.', 'success')
+                
+                # Store results in session for report
+                session['csv_results'] = results
+                
+                # Redirect to reports page
+                return redirect(url_for('reports'))
+            except Exception as e:
+                flash(f'Error processing CSV: {str(e)}', 'danger')
+                return redirect(request.url)
+        else:
+            flash('File must be a CSV', 'danger')
+            return redirect(request.url)
+            
+    return render_template('upload.html')
+
+@app.route('/reports')
+def reports():
+    # Check if we have CSV results in session
+    csv_results = session.get('csv_results')
+    account_snapshots = session.get('account_snapshots')
+    
+    # Get accounts maturing in the next 30 days
+    today = datetime.now().date()
+    thirty_days_later = today + timedelta(days=30)
+    maturing_accounts = Account.query.filter(
+        Account.end_date.isnot(None),
+        Account.end_date.between(today, thirty_days_later)
+    ).all()
+    
+    # Get accounts grouped by FRN and owner
+    accounts_by_frn_owner = db.session.query(
+        Bank.frn,
+        Account.owner,
+        func.sum(Account.balance).label('total_balance'),
+        func.count(Account.id).label('account_count')
+    ).join(Bank, Account.bank_id == Bank.id)\
+    .group_by(Bank.frn, Account.owner)\
+    .all()
+    
+    return render_template('reports.html', 
+                          csv_results=csv_results, 
+                          account_snapshots=account_snapshots,
+                          maturing_accounts=maturing_accounts,
+                          accounts_by_frn_owner=accounts_by_frn_owner)
+
+@app.route('/api/chart-data')
+def chart_data():
+    # Get total balances by account type
+    balances_by_type = db.session.query(
+        Account.account_type,
+        func.sum(Account.balance).label('total_balance')
+    ).group_by(Account.account_type).all()
+    
+    # Get total balances by owner
+    balances_by_owner = db.session.query(
+        Account.owner,
+        func.sum(Account.balance).label('total_balance')
+    ).group_by(Account.owner).all()
+    
+    # Format data for charts
+    type_labels = [t[0] for t in balances_by_type]
+    type_values = [float(t[1]) for t in balances_by_type]
+    
+    owner_labels = [o[0] for o in balances_by_owner]
+    owner_values = [float(o[1]) for o in balances_by_owner]
+    
+    return jsonify({
+        'balancesByType': {
+            'labels': type_labels,
+            'values': type_values
+        },
+        'balancesByOwner': {
+            'labels': owner_labels,
+            'values': owner_values
+        }
+    })

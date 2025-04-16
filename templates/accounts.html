@@ -1,0 +1,430 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Bank Accounts</h1>
+    
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAccountModal">
+        <i class="fas fa-plus me-1"></i> Add Account
+    </button>
+</div>
+
+<!-- Accounts Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">All Accounts</h5>
+            <div class="input-group" style="width: 300px;">
+                <input type="text" id="accountSearch" class="form-control" placeholder="Search accounts...">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="accountsTable">
+                <thead>
+                    <tr>
+                        <th>Account Name</th>
+                        <th>Account Number</th>
+                        <th>Balance</th>
+                        <th>Type</th>
+                        <th>Owner</th>
+                        <th>Bank</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for account in accounts %}
+                    <tr>
+                        <td>{{ account.account_name }}</td>
+                        <td>{{ account.account_number }}</td>
+                        <td>£{{ "%.2f"|format(account.balance) }}</td>
+                        <td>
+                            {% if account.account_type == 'isa' %}
+                            <span class="badge bg-info">ISA</span>
+                            {% elif account.account_type == 'depo' %}
+                            <span class="badge bg-success">Deposit</span>
+                            {% elif account.account_type == 'nsi' %}
+                            <span class="badge bg-warning">NSI</span>
+                            {% else %}
+                            <span class="badge bg-secondary">None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if account.owner == 'a' %}
+                            <span class="badge bg-primary">A</span>
+                            {% elif account.owner == 'i' %}
+                            <span class="badge bg-success">I</span>
+                            {% elif account.owner == 'j' %}
+                            <span class="badge bg-warning">J</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ account.bank_name }}</td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#viewAccountModal{{ account.id }}">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ account.id }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal{{ account.id }}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- View Account Modal -->
+                    <div class="modal fade" id="viewAccountModal{{ account.id }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Account Details: {{ account.account_name }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <p><strong>Account Name:</strong> {{ account.account_name }}</p>
+                                            <p><strong>Account Number:</strong> {{ account.account_number }}</p>
+                                            <p><strong>Balance:</strong> £{{ "%.2f"|format(account.balance) }}</p>
+                                            <p><strong>Type:</strong> {{ account.account_type }}</p>
+                                            <p><strong>Owner:</strong> {{ account.owner }}</p>
+                                            <p><strong>Savings:</strong> {{ account.savings }}</p>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <p><strong>Bank:</strong> {{ account.bank_name }}</p>
+                                            {% if account.account_type != 'none' %}
+                                            <p><strong>Interest Rate:</strong> {{ account.interest_rate }}%</p>
+                                            <p><strong>Start Date:</strong> {{ account.start_date }}</p>
+                                            <p><strong>End Date:</strong> {{ account.end_date }}</p>
+                                            <p><strong>Interest Frequency:</strong> {{ account.interest_frequency }}</p>
+                                            {% endif %}
+                                            <p><strong>Created:</strong> {% if account.created_at %}{{ account.created_at.strftime('%Y-%m-%d %H:%M') }}{% else %}N/A{% endif %}</p>
+                                            <p><strong>Last Updated:</strong> {% if account.updated_at %}{{ account.updated_at.strftime('%Y-%m-%d %H:%M') }}{% else %}N/A{% endif %}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Edit Account Modal -->
+                    <div class="modal fade" id="editAccountModal{{ account.id }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Edit Account</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <form action="{{ url_for('edit_account', id=account.id) }}" method="post">
+                                    <div class="modal-body">
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label for="account_name" class="form-label">Account Name</label>
+                                                <input type="text" class="form-control" id="account_name" name="account_name" value="{{ account.account_name }}" required>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="account_number" class="form-label">Account Number</label>
+                                                <input type="text" class="form-control" id="account_number" name="account_number" value="{{ account.account_number }}" required>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="row mb-3">
+                                            <div class="col-md-4">
+                                                <label for="balance" class="form-label">Balance</label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">£</span>
+                                                    <input type="number" class="form-control" id="balance" name="balance" value="{{ account.balance }}" step="0.01" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="account_type" class="form-label">Account Type</label>
+                                                <select class="form-select" id="account_type" name="account_type" required>
+                                                    <option value="none" {% if account.account_type == 'none' %}selected{% endif %}>None</option>
+                                                    <option value="isa" {% if account.account_type == 'isa' %}selected{% endif %}>ISA</option>
+                                                    <option value="depo" {% if account.account_type == 'depo' %}selected{% endif %}>Deposit</option>
+                                                    <option value="nsi" {% if account.account_type == 'nsi' %}selected{% endif %}>NSI</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="owner" class="form-label">Owner</label>
+                                                <select class="form-select" id="owner" name="owner" required>
+                                                    <option value="a" {% if account.owner == 'a' %}selected{% endif %}>A</option>
+                                                    <option value="i" {% if account.owner == 'i' %}selected{% endif %}>I</option>
+                                                    <option value="j" {% if account.owner == 'j' %}selected{% endif %}>J</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label for="savings" class="form-label">Savings Account</label>
+                                                <select class="form-select" id="savings" name="savings" required>
+                                                    <option value="y" {% if account.savings == 'y' %}selected{% endif %}>Yes</option>
+                                                    <option value="n" {% if account.savings == 'n' %}selected{% endif %}>No</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="bank_id" class="form-label">Bank</label>
+                                                <select class="form-select" id="bank_id" name="bank_id" required>
+                                                    {% for bank in banks %}
+                                                        <option value="{{ bank.id }}" {% if account.bank_id == bank.id %}selected{% endif %}>{{ bank.bank_name }} ({{ bank.frn }})</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <input type="hidden" name="bank_name" value="{{ account.bank_name }}">
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Additional fields for non-"none" type accounts -->
+                                        <div id="additionalFields{{ account.id }}" class="{% if account.account_type == 'none' %}d-none{% endif %}">
+                                            <hr>
+                                            <h5>Additional Account Details</h5>
+                                            
+                                            <div class="row mb-3">
+                                                <div class="col-md-4">
+                                                    <label for="interest_rate" class="form-label">Interest Rate (%)</label>
+                                                    <input type="number" class="form-control" id="interest_rate" name="interest_rate" value="{{ account.interest_rate }}" step="0.01">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label for="start_date" class="form-label">Start Date</label>
+                                                    <input type="date" class="form-control" id="start_date" name="start_date" value="{{ account.start_date }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label for="end_date" class="form-label">End Date</label>
+                                                    <input type="date" class="form-control" id="end_date" name="end_date" value="{{ account.end_date }}">
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="row mb-3">
+                                                <div class="col-md-6">
+                                                    <label for="interest_frequency" class="form-label">Interest Frequency</label>
+                                                    <select class="form-select" id="interest_frequency" name="interest_frequency">
+                                                        <option value="per_year" {% if account.interest_frequency == 'per_year' %}selected{% endif %}>Per Year</option>
+                                                        <option value="per_month" {% if account.interest_frequency == 'per_month' %}selected{% endif %}>Per Month</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Delete Account Modal -->
+                    <div class="modal fade" id="deleteAccountModal{{ account.id }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Confirm Deletion</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p>Are you sure you want to delete the account "{{ account.account_name }}"?</p>
+                                    <p class="text-danger"><strong>This action cannot be undone!</strong></p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <form action="{{ url_for('delete_account', id=account.id) }}" method="post">
+                                        <button type="submit" class="btn btn-danger">Delete</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center">No accounts found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Account Modal -->
+<div class="modal fade" id="addAccountModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Account</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('add_account') }}" method="post">
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="new_account_name" class="form-label">Account Name</label>
+                            <input type="text" class="form-control" id="new_account_name" name="account_name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="new_account_number" class="form-label">Account Number</label>
+                            <input type="text" class="form-control" id="new_account_number" name="account_number" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="new_balance" class="form-label">Balance</label>
+                            <div class="input-group">
+                                <span class="input-group-text">£</span>
+                                <input type="number" class="form-control" id="new_balance" name="balance" value="0.00" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="new_account_type" class="form-label">Account Type</label>
+                            <select class="form-select" id="new_account_type" name="account_type" required>
+                                <option value="none">None</option>
+                                <option value="isa">ISA</option>
+                                <option value="depo">Deposit</option>
+                                <option value="nsi">NSI</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="new_owner" class="form-label">Owner</label>
+                            <select class="form-select" id="new_owner" name="owner" required>
+                                <option value="a">A</option>
+                                <option value="i">I</option>
+                                <option value="j">J</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="new_savings" class="form-label">Savings Account</label>
+                            <select class="form-select" id="new_savings" name="savings" required>
+                                <option value="y">Yes</option>
+                                <option value="n">No</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="new_bank_id" class="form-label">Bank</label>
+                            <select class="form-select" id="new_bank_id" name="bank_id" required>
+                                {% for bank in banks %}
+                                    <option value="{{ bank.id }}">{{ bank.bank_name }} ({{ bank.frn }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional fields for non-"none" type accounts -->
+                    <div id="newAdditionalFields" class="d-none">
+                        <hr>
+                        <h5>Additional Account Details</h5>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="new_interest_rate" class="form-label">Interest Rate (%)</label>
+                                <input type="number" class="form-control" id="new_interest_rate" name="interest_rate" value="0.00" step="0.01">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="new_start_date" class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="new_start_date" name="start_date">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="new_end_date" class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="new_end_date" name="end_date">
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="new_interest_frequency" class="form-label">Interest Frequency</label>
+                                <select class="form-select" id="new_interest_frequency" name="interest_frequency">
+                                    <option value="per_year">Per Year</option>
+                                    <option value="per_month">Per Month</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Show/hide additional fields based on account type
+    document.addEventListener('DOMContentLoaded', function() {
+        // For new account form
+        const newAccountTypeSelect = document.getElementById('new_account_type');
+        const newAdditionalFields = document.getElementById('newAdditionalFields');
+        
+        newAccountTypeSelect.addEventListener('change', function() {
+            if (this.value === 'none') {
+                newAdditionalFields.classList.add('d-none');
+            } else {
+                newAdditionalFields.classList.remove('d-none');
+            }
+        });
+        
+        // For edit account forms
+        {% for account in accounts %}
+        const accountTypeSelect{{ account.id }} = document.getElementById('account_type');
+        const additionalFields{{ account.id }} = document.getElementById('additionalFields{{ account.id }}');
+        
+        if (accountTypeSelect{{ account.id }}) {
+            accountTypeSelect{{ account.id }}.addEventListener('change', function() {
+                if (this.value === 'none') {
+                    additionalFields{{ account.id }}.classList.add('d-none');
+                } else {
+                    additionalFields{{ account.id }}.classList.remove('d-none');
+                }
+            });
+        }
+        {% endfor %}
+        
+        // Account search functionality
+        const accountSearch = document.getElementById('accountSearch');
+        const accountsTable = document.getElementById('accountsTable');
+        
+        accountSearch.addEventListener('keyup', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = accountsTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+            
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.getElementsByTagName('td');
+                
+                if (cells.length > 0) {
+                    let found = false;
+                    
+                    for (let j = 0; j < cells.length - 1; j++) {
+                        const cellText = cells[j].textContent.toLowerCase();
+                        
+                        if (cellText.includes(searchTerm)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (found) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
