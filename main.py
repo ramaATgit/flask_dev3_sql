@@ -87,13 +87,10 @@ class TransactionLog(db.Model):
 @app.cli.command("init-db")
 def init_db():
     """Initialize the database and seed data."""
-    # Ensure instance folder exists
     os.makedirs(app.instance_path, exist_ok=True)
 
     with app.app_context():
-        # Create tables
         db.create_all()
-        # Seed initial data
         seed_database()
     print(f"Database initialized at {os.path.join(app.instance_path, 'bank_management.db')}")
 
@@ -112,112 +109,43 @@ def seed_database():
         db.session.add_all(banks)
         db.session.commit()
 
-        # Get bank IDs for referencing
-        global_bank = Bank.query.filter_by(bank_name="Global Bank").first()
-        city_financial = Bank.query.filter_by(bank_name="City Financial").first()
-        national_savings = Bank.query.filter_by(bank_name="National Savings").first()
-
         # Add sample accounts
         accounts = [
-        Account(
-            account_name="Emergency Fund",
-            account_number="A001",
-            balance=5000.00,
-            account_type="depo",
-            owner="j",
-            savings="y",
-            bank_name="Global Bank",
-            interest_rate=1.5,
-            start_date=datetime(2022, 1, 15).date(),
-            end_date=datetime(2023, 1, 15).date(),
-            interest_frequency="per year",
-            bank_id=global_bank.id
-        ),
-        Account(
-            account_name="Vacation Savings",
-            account_number="A002",
-            balance=2500.00,
-            account_type="isa",
-            owner="a",
-            savings="y",
-            bank_name="City Financial",
-            interest_rate=2.3,
-            start_date=datetime(2022, 3, 10).date(),
-            end_date=datetime(2023, 3, 10).date(),
-            interest_frequency="per year",
-            bank_id=city_financial.id
-        ),
-        Account(
-            account_name="Mortgage",
-            account_number="A003",
-            balance=150000.00,
-            account_type="none",
-            owner="j",
-            savings="n",
-            bank_name="Global Bank",
-            bank_id=global_bank.id
-        ),
-        Account(
-            account_name="College Fund",
-            account_number="A004",
-            balance=10000.00,
-            account_type="isa",
-            owner="i",
-            savings="y",
-            bank_name="National Savings",
-            interest_rate=3.1,
-            start_date=datetime(2021, 9, 1).date(),
-            end_date=datetime(2026, 9, 1).date(),
-            interest_frequency="per year",
-            bank_id=national_savings.id
-        ),
-        Account(
-            account_name="Car Loan",
-            account_number="A005",
-            balance=12000.00,
-            account_type="none",
-            owner="a",
-            savings="n",
-            bank_name="City Financial",
-            bank_id=city_financial.id
-        ),
-    ]
+            Account(
+                account_name="Emergency Fund",
+                account_number="A001",
+                balance=5000.00,
+                account_type="depo",
+                owner="j",
+                savings="y",
+                bank_name="Global Bank",
+                interest_rate=1.5,
+                start_date=datetime(2022, 1, 15).date(),
+                end_date=datetime(2023, 1, 15).date(),
+                interest_frequency="per year",
+                bank_id=banks[0].id
+            ),
+            # Add more accounts here
+        ]
 
-    for account in accounts:
-        db.session.add(account)
-
-    db.session.commit()
-
-    # Add sample transaction logs
-    logs = [
-        TransactionLog(
-            account_id=1,
-            previous_balance=4800.00,
-            new_balance=5000.00,
-            change_amount=200.00,
-            source="manual deposit",
-            timestamp=datetime(2022, 12, 15)
-        ),
-        TransactionLog(
-            account_id=2,
-            previous_balance=3000.00,
-            new_balance=2500.00,
-            change_amount=-500.00,
-            source="withdrawal",
-            timestamp=datetime(2022, 11, 30)
-        ),
-        TransactionLog(
-            account_id=4,
-            previous_balance=9700.00,
-            new_balance=10000.00,
-            change_amount=300.00,
-            source="interest payment",
-            timestamp=datetime(2022, 12, 1)
-        ),
-    ]
-        db.session.add_all(logs)
+        db.session.add_all(accounts)
         db.session.commit()
+        # Add sample transaction logs
+        logs = [
+            TransactionLog(
+                account_id=1,
+                previous_balance=4800.00,
+                new_balance=5000.00,
+                change_amount=200.00,
+                source="manual deposit",
+                timestamp=datetime(2022, 12, 15)
+            )
+        ]
 
+        for log in logs:
+            db.session.add(log)
+
+        db.session.commit()
         print("Sample data added.")
     else:
         print("Database already contains data. Skipping seeding.")
@@ -227,7 +155,8 @@ def seed_database():
 def inject_now():
     return {'now': datetime.utcnow()}
 
-# Routes (all your existing routes remain exactly the same)
+# Flask Routes
+# Routes
 @app.route('/')
 def index():
     account_count = Account.query.count()
@@ -942,5 +871,7 @@ def chart_data():
             'owners': {'labels': [], 'values': []},
             'frns': {'labels': [], 'values': []}
         }), 500
+
+# Run the app
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

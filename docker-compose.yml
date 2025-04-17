@@ -1,14 +1,13 @@
-version: '3.8'
-
 services:
   web:
     build: .
     ports:
       - "5005:5000"
     volumes:
-      - ./instance:/app/instance  # Persist SQLite DB
-      - ./templates:/app/templates  # Mount templates
-      - ./static:/app/static  # Mount static files
+      - ./instance:/app/instance
+      - ./templates:/app/templates
+      - ./static:/app/static
     environment:
+      - FLASK_APP=main.py  # Add this line
       - FLASK_ENV=production
       - SESSION_SECRET=your-secret-key-here
