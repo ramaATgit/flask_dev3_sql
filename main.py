@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from werkzeug.utils import secure_filename
 import sqlalchemy as sa
+import click
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -21,15 +22,12 @@ db = SQLAlchemy(model_class=Base)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
 
-# Configure SQLite database
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(basedir, 'bank_management.db')}"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# Configure SQLite database to use instance folder
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(app.instance_path, 'bank_management.db')}"
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize the app with the extension
 db.init_app(app)
-
-# [Keep all your existing models, routes, and seed_database function unchanged...]
 
 # Define models
 class Account(db.Model):
@@ -85,16 +83,151 @@ class TransactionLog(db.Model):
     def __repr__(self):
         return f"<TransactionLog {self.id}>"
 
-# Create all tables
-with app.app_context():
-    db.create_all()
+# CLI Commands
+@app.cli.command("init-db")
+def init_db():
+    """Initialize the database and seed data."""
+    # Ensure instance folder exists
+    os.makedirs(app.instance_path, exist_ok=True)
+
+    with app.app_context():
+        # Create tables
+        db.create_all()
+        # Seed initial data
+        seed_database()
+    print(f"Database initialized at {os.path.join(app.instance_path, 'bank_management.db')}")
+
+def seed_database():
+    """Add sample data to the database if empty."""
+    if Account.query.count() == 0 and Bank.query.count() == 0:
+        print("Seeding database with sample data...")
+
+        # Add sample banks
+        banks = [
+            Bank(bank_name="Global Bank", frn="GB12345"),
+            Bank(bank_name="City Financial", frn="CF67890"),
+            Bank(bank_name="National Savings", frn="NS10293"),
+            Bank(bank_name="Metro Credit Union", frn="MC84756")
+        ]
+        db.session.add_all(banks)
+        db.session.commit()
+
+        # Get bank IDs for referencing
+        global_bank = Bank.query.filter_by(bank_name="Global Bank").first()
+        city_financial = Bank.query.filter_by(bank_name="City Financial").first()
+        national_savings = Bank.query.filter_by(bank_name="National Savings").first()
+
+        # Add sample accounts
+        accounts = [
+        Account(
+            account_name="Emergency Fund",
+            account_number="A001",
+            balance=5000.00,
+            account_type="depo",
+            owner="j",
+            savings="y",
+            bank_name="Global Bank",
+            interest_rate=1.5,
+            start_date=datetime(2022, 1, 15).date(),
+            end_date=datetime(2023, 1, 15).date(),
+            interest_frequency="per year",
+            bank_id=global_bank.id
+        ),
+        Account(
+            account_name="Vacation Savings",
+            account_number="A002",
+            balance=2500.00,
+            account_type="isa",
+            owner="a",
+            savings="y",
+            bank_name="City Financial",
+            interest_rate=2.3,
+            start_date=datetime(2022, 3, 10).date(),
+            end_date=datetime(2023, 3, 10).date(),
+            interest_frequency="per year",
+            bank_id=city_financial.id
+        ),
+        Account(
+            account_name="Mortgage",
+            account_number="A003",
+            balance=150000.00,
+            account_type="none",
+            owner="j",
+            savings="n",
+            bank_name="Global Bank",
+            bank_id=global_bank.id
+        ),
+        Account(
+            account_name="College Fund",
+            account_number="A004",
+            balance=10000.00,
+            account_type="isa",
+            owner="i",
+            savings="y",
+            bank_name="National Savings",
+            interest_rate=3.1,
+            start_date=datetime(2021, 9, 1).date(),
+            end_date=datetime(2026, 9, 1).date(),
+            interest_frequency="per year",
+            bank_id=national_savings.id
+        ),
+        Account(
+            account_name="Car Loan",
+            account_number="A005",
+            balance=12000.00,
+            account_type="none",
+            owner="a",
+            savings="n",
+            bank_name="City Financial",
+            bank_id=city_financial.id
+        ),
+    ]
+
+    for account in accounts:
+        db.session.add(account)
+
+    db.session.commit()
+
+    # Add sample transaction logs
+    logs = [
+        TransactionLog(
+            account_id=1,
+            previous_balance=4800.00,
+            new_balance=5000.00,
+            change_amount=200.00,
+            source="manual deposit",
+            timestamp=datetime(2022, 12, 15)
+        ),
+        TransactionLog(
+            account_id=2,
+            previous_balance=3000.00,
+            new_balance=2500.00,
+            change_amount=-500.00,
+            source="withdrawal",
+            timestamp=datetime(2022, 11, 30)
+        ),
+        TransactionLog(
+            account_id=4,
+            previous_balance=9700.00,
+            new_balance=10000.00,
+            change_amount=300.00,
+            source="interest payment",
+            timestamp=datetime(2022, 12, 1)
+        ),
+    ]
+        db.session.add_all(logs)
+        db.session.commit()
+
+        print("Sample data added.")
+    else:
+        print("Database already contains data. Skipping seeding.")
 
 # Context processor to inject 'now' into templates
 @app.context_processor
 def inject_now():
     return {'now': datetime.utcnow()}
 
-# Routes
+# Routes (all your existing routes remain exactly the same)
 @app.route('/')
 def index():
     account_count = Account.query.count()
@@ -809,139 +942,5 @@ def chart_data():
             'owners': {'labels': [], 'values': []},
             'frns': {'labels': [], 'values': []}
         }), 500
-
-def seed_database():
-    """Add sample data to the database."""
-    # Only seed if the database is empty
-    if Account.query.count() > 0 or Bank.query.count() > 0:
-        print("Database already contains data. Skipping seed operation.")
-        return
-
-    # Add sample banks
-    banks = [
-        Bank(bank_name="Global Bank", frn="GB12345"),
-        Bank(bank_name="City Financial", frn="CF67890"),
-        Bank(bank_name="National Savings", frn="NS10293"),
-        Bank(bank_name="Metro Credit Union", frn="MC84756")
-    ]
-
-    for bank in banks:
-        db.session.add(bank)
-
-    db.session.commit()
-
-    # Get bank IDs for referencing
-    global_bank = Bank.query.filter_by(bank_name="Global Bank").first()
-    city_financial = Bank.query.filter_by(bank_name="City Financial").first()
-    national_savings = Bank.query.filter_by(bank_name="National Savings").first()
-
-    # Add sample accounts
-    accounts = [
-        Account(
-            account_name="Emergency Fund",
-            account_number="A001",
-            balance=5000.00,
-            account_type="depo",
-            owner="j",
-            savings="y",
-            bank_name="Global Bank",
-            interest_rate=1.5,
-            start_date=datetime(2022, 1, 15).date(),
-            end_date=datetime(2023, 1, 15).date(),
-            interest_frequency="per year",
-            bank_id=global_bank.id
-        ),
-        Account(
-            account_name="Vacation Savings",
-            account_number="A002",
-            balance=2500.00,
-            account_type="isa",
-            owner="a",
-            savings="y",
-            bank_name="City Financial",
-            interest_rate=2.3,
-            start_date=datetime(2022, 3, 10).date(),
-            end_date=datetime(2023, 3, 10).date(),
-            interest_frequency="per year",
-            bank_id=city_financial.id
-        ),
-        Account(
-            account_name="Mortgage",
-            account_number="A003",
-            balance=150000.00,
-            account_type="none",
-            owner="j",
-            savings="n",
-            bank_name="Global Bank",
-            bank_id=global_bank.id
-        ),
-        Account(
-            account_name="College Fund",
-            account_number="A004",
-            balance=10000.00,
-            account_type="isa",
-            owner="i",
-            savings="y",
-            bank_name="National Savings",
-            interest_rate=3.1,
-            start_date=datetime(2021, 9, 1).date(),
-            end_date=datetime(2026, 9, 1).date(),
-            interest_frequency="per year",
-            bank_id=national_savings.id
-        ),
-        Account(
-            account_name="Car Loan",
-            account_number="A005",
-            balance=12000.00,
-            account_type="none",
-            owner="a",
-            savings="n",
-            bank_name="City Financial",
-            bank_id=city_financial.id
-        )
-    ]
-
-    for account in accounts:
-        db.session.add(account)
-
-    db.session.commit()
-
-    # Add sample transaction logs
-    logs = [
-        TransactionLog(
-            account_id=1,
-            previous_balance=4800.00,
-            new_balance=5000.00,
-            change_amount=200.00,
-            source="manual deposit",
-            timestamp=datetime(2022, 12, 15)
-        ),
-        TransactionLog(
-            account_id=2,
-            previous_balance=3000.00,
-            new_balance=2500.00,
-            change_amount=-500.00,
-            source="withdrawal",
-            timestamp=datetime(2022, 11, 30)
-        ),
-        TransactionLog(
-            account_id=4,
-            previous_balance=9700.00,
-            new_balance=10000.00,
-            change_amount=300.00,
-            source="interest payment",
-            timestamp=datetime(2022, 12, 1)
-        )
-    ]
-
-    for log in logs:
-        db.session.add(log)
-
-    db.session.commit()
-
-    print("Sample data has been added to the database.")
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-        seed_database()
     app.run(host="0.0.0.0", port=5000, debug=True)

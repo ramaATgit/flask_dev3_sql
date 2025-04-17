@@ -1,33 +1,22 @@
-# Use official Python slim image
-FROM python:3.11-slim
+FROM python:3.9-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-ENV FLASK_APP=main.py
-ENV FLASK_DEBUG=1
-
-# Set work directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc python3-dev && \
-    rm -rf /var/lib/apt/lists/*
+# Install system deps (SQLite is included)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements-local.txt .
-RUN pip install --no-cache-dir -r requirements-local.txt
+# Copy requirements first for caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy the entire project
 COPY . .
 
-# Create the SQLite database directory
-RUN mkdir -p instance
-
-# Recommended for SQLite in Docker
-RUN chmod a+w /app/instance
+# Ensure the instance folder exists
+RUN mkdir -p /app/instance
 
 EXPOSE 5000
 
-# Note: The actual startup command is in docker-compose.yml
+# Production (Gunicorn) or Development (Flask)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
