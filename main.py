@@ -95,61 +95,82 @@ def init_db():
     print(f"Database initialized at {os.path.join(app.instance_path, 'bank_management.db')}")
 
 def seed_database():
-    """Add sample data to the database if empty."""
-    if Account.query.count() == 0 and Bank.query.count() == 0:
-        print("Seeding database with sample data...")
+    """Add sample data to the database, appending if data already exists"""
+    print("Seeding database with sample data...")
+    
+    # Clear existing seed data (optional - remove if you want to keep existing non-seed data)
+    Bank.query.filter(Bank.frn.in_(["GB12345", "CF67890", "NS10293", "MC84756"])).delete()
+    Account.query.filter(Account.account_number.in_(["A001", "A002", "A003", "A004", "A005"])).delete()
+    db.session.commit()
 
-        # Add sample banks
-        banks = [
-            Bank(bank_name="Global Bank", frn="GB12345"),
-            Bank(bank_name="City Financial", frn="CF67890"),
-            Bank(bank_name="National Savings", frn="NS10293"),
-            Bank(bank_name="Metro Credit Union", frn="MC84756")
-        ]
-        db.session.add_all(banks)
-        db.session.commit()
+    # Add sample banks (will be inserted only if they don't exist due to unique constraints)
+    banks = [
+        Bank(bank_name="Global Bank", frn="GB12345"),
+        Bank(bank_name="City Financial", frn="CF67890"),
+        Bank(bank_name="National Savings", frn="NS10293"),
+        Bank(bank_name="Metro Credit Union", frn="MC84756")
+    ]
+    
+    for bank in banks:
+        if not Bank.query.filter_by(frn=bank.frn).first():
+            db.session.add(bank)
+    
+    db.session.commit()
 
-        # Add sample accounts
-        accounts = [
-            Account(
-                account_name="Emergency Fund",
-                account_number="A001",
-                balance=5000.00,
-                account_type="depo",
-                owner="j",
-                savings="y",
-                bank_name="Global Bank",
-                interest_rate=1.5,
-                start_date=datetime(2022, 1, 15).date(),
-                end_date=datetime(2023, 1, 15).date(),
-                interest_frequency="per year",
-                bank_id=banks[0].id
-            ),
-            # Add more accounts here
-        ]
+    # Get bank references
+    global_bank = Bank.query.filter_by(frn="GB12345").first()
+    city_financial = Bank.query.filter_by(frn="CF67890").first()
+    national_savings = Bank.query.filter_by(frn="NS10293").first()
 
-        db.session.add_all(accounts)
-        db.session.commit()
-        # Add sample transaction logs
-        logs = [
-            TransactionLog(
-                account_id=1,
-                previous_balance=4800.00,
-                new_balance=5000.00,
-                change_amount=200.00,
-                source="manual deposit",
-                timestamp=datetime(2022, 12, 15)
-            )
-        ]
+    # Add sample accounts (only if they don't exist)
+    accounts = [
+        Account(
+            account_name="Emergency Fund",
+            account_number="A001",
+            balance=5000.00,
+            account_type="depo",
+            owner="j",
+            savings="y",
+            bank_name=global_bank.bank_name,
+            interest_rate=1.5,
+            start_date=datetime(2022, 1, 15).date(),
+            end_date=datetime(2023, 1, 15).date(),
+            interest_frequency="per year",
+            bank_id=global_bank.id
+        ),
+        # ... [other accounts] ...
+    ]
+    
+    for account in accounts:
+        if not Account.query.filter_by(account_number=account.account_number).first():
+            db.session.add(account)
+    
+    db.session.commit()
 
-        for log in logs:
+    # Add sample transaction logs
+    logs = [
+        TransactionLog(
+            account_id=1,
+            previous_balance=4800.00,
+            new_balance=5000.00,
+            change_amount=200.00,
+            source="manual deposit",
+            timestamp=datetime(2022, 12, 15)
+        ),
+        # ... [other logs] ...
+    ]
+    
+    for log in logs:
+        existing = db.session.query(TransactionLog).filter_by(
+            account_id=log.account_id,
+            timestamp=log.timestamp,
+            change_amount=log.change_amount
+        ).first()
+        if not existing:
             db.session.add(log)
-
-        db.session.commit()
-        print("Sample data added.")
-    else:
-        print("Database already contains data. Skipping seeding.")
-
+    
+    db.session.commit()
+    print("Sample data added/updated.")
 # Context processor to inject 'now' into templates
 @app.context_processor
 def inject_now():
